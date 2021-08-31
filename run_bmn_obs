@@ -1,9 +1,17 @@
 #!/bin/bash
+#Used to extract observables from output files generated using https://github.com/daschaich/susy/tree/master/1d_Q16
+
+#This script needs some improvement (specifically in action and acceptance rate)
+#T is temperature, mu is mass used in BMN, N is number of colors and Nt is number of lattice sites across temporal direction
+#(Nt=Nx as symmetric lattices are used)
 
 T=$1
 mu=$2
 N=$3
 Nt=$4
+
+#I have arranged folders with different temperatures which contain an 'Out' folder with all out files.
+#Extarcted observables are then moved from 'Out' to 'Results' folder.
 
 cd t$1
 echo ==== Deleting previous data in Results ====
@@ -20,30 +28,26 @@ cd Out
 
 acc_in=0
 
+#Extracting observables for 3500 MDTU's
+
 for ((c=0 ;c<3500; c+=10))
 
 do
 
-
 #echo ==Extracting Delta==
 grep "delta" out.$c-* | awk '{print $5}' >> del.txt #delta S
-#echo Done
 
 #echo ==Extracting Forces==
 grep "FORCE_GAUGE" out.$c-* | awk '{print $2}' >>force_g.txt #FORCES
-#echo Done
 
 #echo ==Extracting exp[-delta S]==
 grep "delta" out.$c-* | awk '{print exp(-$5)}' >> exp_del.txt #exp(-delta S)
-#echo Done
 
 #echo ==Extracting mod[delta S]==
 grep "delta" out.$c-* | awk '{print $5<0?$5*-1:$5}' >> mod_del.txt # |delta S|
-#echo Done
 
 #echo ==Extracting Acceptance rate==
 grep "ACCEPT" ./out.$c-* | wc -l >> acc.txt 
-#echo Done
 
 acc_in=`grep "" ./acc.txt | awk -v acc_in="$acc_in" '{print $1+acc_in}'`
 rate=`grep "" ./acc.txt | awk -v acc_in="$acc_in", -v c="$c" '{print acc_in/(c+10)}'`
@@ -55,58 +59,56 @@ echo $rate >> rate.txt
 
 #echo ==Extracting nstep==
 grep "nstep " out.$c-* | awk '{print $2}' >> nstep.txt #nstep
-#echo Done
 
 #echo ==Extracting nstep_gauge==
 grep "nstep_" out.$c-* | awk '{print $2}' >> nstep_g.txt #nstep_gauge
-#echo Done
 
 #echo ==Extracting Traj length==
 grep "traj_l" out.$c-* | awk '{print $2}' >> traj.txt #Trajec Length
-#echo done
 
 done
 
 rm acc.txt
 
 #echo ==Extracting Re and Im Polyakov Loop==
-grep "GMES" out.$c-* | awk -v N="$N" '{print $2/N,$3/N}' >> poly.txt #Maldacena loop
-#echo done
+grep "GMES" out.$c-* | awk -v N="$N" '{print $2/N,$3/N}' >> poly.txt #Polyakov loop
 
 #echo ==Extracting Mod Polyakov Loop==
-grep "GMES" out.$c-* | awk -v N="$N" '{print sqrt($2*$2+$3*$3)/(N)}' >> poly_mod.txt #Mod Maldacena loop
-#echo done
+grep "GMES" out.$c-* | awk -v N="$N" '{print sqrt($2*$2+$3*$3)/(N)}' >> poly_mod.txt #Mod Polyakov loop
+
 grep "GMES" out.$c-* | awk -v N="$N" '{print ($2*$2+$3*$3)/(N*N)}' >> poly_sq.txt #Poly Square
 
 #echo ==Extracting Internal energy==
 grep "action" ./out.$c-* | awk -v N="$N", -v T="$T" '{print ($7*3.0+2.0*$3+2.0*$5+2.5*$9)*T/(N*N)}' >> energy1.txt #Internal Energy
-#echo done
 
 #echo ==Extracting Internal energy Prime==
 grep "action" ./out.$c-* | awk -v T="$T" '{print ($7*3.0/0.5+2.0*$3+2.0*$5+2.5*$9*1.5)*T*T}' >> energy_prime1.txt #Internal Energy Prime
-#echo done
-
 
 #echo ==Extracting Myers==
 grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($9)*(T/mu)*(1.0/(N*N))}' >> myers1.txt #Myers Term
-#echo done
-
 
 #echo ==Extracting Extent of space==
 grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($3*2.0*9.0+$5*2.0*36.0)*(T/(mu*mu))/(N*N)}' >> extent1.txt #Extent of space
-#echo done
 
+#echo ==Extracting Action==
 grep "delta" ./out.$c-* | awk '{print $9}' >> action.txt #Action
+
+#echo ==Extracting SO(3)==
 grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($3*2.0*9.0)*(T/(mu*mu))/(N*N)}' >> so31.txt #SO3
+
+#echo ==Extracting SO(6)
 grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($5*2.0*36.0)*(T/(mu*mu))/(N*N)}' >> so61.txt #SO6
+
 done
 
 cd ..
 
 cd Results
 
-
 scp ../Out/*.txt ./
+
+#All observables files contains initial and final values of observables extracted from Out files
+#Extracting observable values after metropolis test
 
 awk '{if(NR%2!=0)print}' energy1.txt >> energy.txt
 awk '{if(NR%2!=0)print}' extent1.txt >> extent.txt
@@ -116,20 +118,23 @@ awk '{if(NR%2!=0)print}' so31.txt >> so3.txt
 awk '{if(NR%2!=0)print}' so61.txt >> so6.txt
 
 echo ==Plotting graphs==
-gnuplot poly.p
-gnuplot poly_mod.p
-gnuplot nstep.p
-gnuplot forces.p
-gnuplot mod_del.p
-gnuplot exp_del.p
-gnuplot del.p
-gnuplot traj.p
-gnuplot energy.p
-gnuplot extent.p
-gnuplot myers.p
-gnuplot action.p
-gnuplot rate.p
-gnuplot so.p
+#gnuplot poly.p
+#gnuplot poly_mod.p
+#gnuplot nstep.p
+#gnuplot forces.p
+#gnuplot mod_del.p
+#gnuplot exp_del.p
+#gnuplot del.p
+#gnuplot traj.p
+#gnuplot energy.p
+#gnuplot extent.p
+#gnuplot myers.p
+#gnuplot action.p
+#gnuplot rate.p
+#gnuplot so.p
+
+#errors is compiled file to calculate average and error for all data files with thermalisation cut 500
+#
 
 ./errors -c1 -s500 energy.txt
 
