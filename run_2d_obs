@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+#Used to extract observables from output/eigen/measurement files generated using https://github.com/daschaich/susy/tree/master/2d_Q04
+#Still to improve, to generalise it for arbitrary N and still to add couple of more observables like acceptance rate
+
+echo ==== Deleting previous data in Results ====
+cd Results
+
+	rm -f *.txt
+        rm -f *.png
+
+cd ..
+
+#I have arranged folders with different configuration which contain an 'Out' folder with all out/eig/meas files.
+#Extarcted observables are then moved from 'Out' to 'Results' folder.
+
+echo ==== Extracting observables ====
+
+cd Out
+
+#Extracting observables for 3500 MDTU's
+#Extracted observables only depend on N(Number of colors) wherever you see divide by 12 that corresponds 
+#to divide by Number of Colors
+
+for ((c=0 ;c<3500; c+=10))
+
+do
+
+#echo ==Extracting Delta==
+grep "delta" out.$c-* | awk '{print $5}' >> del.txt #delta S
+
+#echo ==Extracting Forces==
+grep "FORCE_GAUGE" out.$c-* | awk '{print $2}' >>force_g.txt #FORCES
+grep "FORCE_FERMI" out.$c-* | awk '{print $2}' >>force_f.txt
+
+#echo ==Extracting exp[-delta S]==
+grep "delta" out.$c-* | awk '{print exp(-$5)}' >> exp_del.txt #exp(-delta S)
+
+#echo ==Extracting mod[delta S]==
+grep "delta" out.$c-* | awk '{print $5<0?$5*-1:$5}' >> mod_del.txt # |delta S|
+
+#echo ==Extracting nsteps==
+#grep "nstep\|nstep_g" ./out.$c-* | awk '{print $2}' #nsteps
+
+#echo ==Extracting Maximum CG Iterations==
+grep "IT_PER_TRAJ" out.$c-* | awk '{print $2}' >> cg.txt #Max CG iterations
+
+for ((d=1;d<=10;d++))
+
+do
+
+#echo ==Extracting Norder==
+grep "RHMC Norder" out.$c-* | awk '{print $3}' >> norder.txt #Norder
+
+#echo ==Extracting nstep==
+grep "nstep " out.$c-* | awk '{print $2}' >> nstep.txt #nstep
+
+#echo ==Extracting nstep_gauge==
+grep "nstep_" out.$c-* | awk '{print $2}' >> nstep_g.txt #nstep_gauge
+
+#echo ==Extracting Traj length==
+grep "traj_l" out.$c-* | awk '{print $2}' >> traj.txt #Trajec Length
+
+done
+
+#echo ==Extracting Re and Im Polyakov Loop==
+grep "GMES" out.$c-* | awk '{print $2/12,$3/12}' >> poly.txt #Maldacena loop
+
+#echo ==Extracting Mod Polyakov Loop==
+grep "GMES" out.$c-* | awk '{print sqrt($2*$2+$3*$3)/12}' >> poly_mod.txt #Mod Maldacena loop
+
+#echo ==Extracting Plaquette==
+grep "GMES" out.$c-* | awk '{print $5/12}' >> plaq.txt #Plaquette
+
+#echo ==Extracting Bosonic Action==
+grep "GMES" out.$c-* | awk '{print $6/(1.5*12*12)}' >> bos.txt #Bosonic Action
+
+#echo ==Extracting Polyakov Loop==
+grep "LINES_P" ./out.$c-* | awk '{print $4/12,$5/12,sqrt($4*$4+$5*$5)/12}' >> poly_polar.txt #Polyakov Loop
+
+#echo ==Extracting Mod Wilson Lines==
+grep "LINES " ./out.$c-* | awk '{print sqrt($2*$2+$3*$3)/12}' >> lines_mod.txt #Mod Wilson
+
+#echo ==Extracting Mod Unitary Lines==
+grep "LINES_P" ./out.$c-* | awk '{print sqrt($2*$2+$3*$3)/12}' >> lines_polar_mod.txt #Mod Unitary
+
+#echo ==Extracting Tr_X^2==
+grep "TR_XSQ" meas.$c | awk '{print $2}' >> meas.txt #
+
+done
+
+#Check if there is any CG divergence
+grep "CONGRAD" ./out* 
+#If this prints something it means CG has not converged somewhere in the runs
+
+#Check that eigen values are in the bound
+#For that by checking Norder you get an allowed range [a,b]
+#Then run
+grep "EIG" ./eig.* | awk '{if($3<a||$3>b) print $3}'
+#If this prints something it means that somewhere eigen values have gone out of given range
+
+cd ..
+
+cd Results
+
+scp ../Out/*.txt ./
+
+echo ==Plotting graphs==
+#gnuplot poly.p
+#gnuplot poly_mod.p
+#gnuplot plaq.p
+#gnuplot nstep.p
+#gnuplot norder.p
+#gnuplot forces.p
+#gnuplot mod_del.p
+#gnuplot exp_del.p
+#gnuplot del.p
+#gnuplot cg.p
+#gnuplot bos.p
+#gnuplot traj.p
+#gnuplot poly_polar.p
+#gnuplot poly_polar_mod.p
+#gnuplot lines_mod.p
+#gnuplot lines_polar_mod.p
+
+
+cd ..
+
+cd Out
+
+rm *.txt
+
+cd ..
+
+
+wait 
+
+echo Done
