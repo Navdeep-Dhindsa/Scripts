@@ -1,0 +1,211 @@
+#!/bin/bash
+
+T=$1
+mu=$2
+N=$3
+Nt=$4
+
+cd t$1
+echo ==== Deleting previous data in Results ====
+cd Results
+
+	rm -f *.txt
+        rm -f *.png
+
+cd ..
+
+echo ==== Extracting observables ====
+
+cd Out
+
+acc_in=0
+
+for ((c=0 ;c<3500; c+=10))
+
+do
+
+
+#echo ==Extracting Delta==
+grep "delta" out.$c-* | awk '{print $5}' >> del.txt #delta S
+#echo Done
+
+#echo ==Extracting Forces==
+grep "FORCE_GAUGE" out.$c-* | awk '{print $2}' >>force_g.txt #FORCES
+#echo Done
+
+#echo ==Extracting exp[-delta S]==
+grep "delta" out.$c-* | awk '{print exp(-$5)}' >> exp_del.txt #exp(-delta S)
+#echo Done
+
+#echo ==Extracting mod[delta S]==
+grep "delta" out.$c-* | awk '{print $5<0?$5*-1:$5}' >> mod_del.txt # |delta S|
+#echo Done
+
+#echo ==Extracting Acceptance rate==
+grep "ACCEPT" ./out.$c-* | wc -l >> acc.txt 
+#echo Done
+
+acc_in=`grep "" ./acc.txt | awk -v acc_in="$acc_in" '{print $1+acc_in}'`
+rate=`grep "" ./acc.txt | awk -v acc_in="$acc_in", -v c="$c" '{print acc_in/(c+10)}'`
+
+for ((d=1;d<=10;d++))
+do
+
+echo $rate >> rate.txt
+
+#echo ==Extracting nstep==
+grep "nstep " out.$c-* | awk '{print $2}' >> nstep.txt #nstep
+#echo Done
+
+#echo ==Extracting nstep_gauge==
+grep "nstep_" out.$c-* | awk '{print $2}' >> nstep_g.txt #nstep_gauge
+#echo Done
+
+#echo ==Extracting Traj length==
+grep "traj_l" out.$c-* | awk '{print $2}' >> traj.txt #Trajec Length
+#echo done
+
+done
+
+rm acc.txt
+
+#echo ==Extracting Re and Im Polyakov Loop==
+grep "GMES" out.$c-* | awk -v N="$N" '{print $2/N,$3/N}' >> poly.txt #Maldacena loop
+#echo done
+
+#echo ==Extracting Mod Polyakov Loop==
+grep "GMES" out.$c-* | awk -v N="$N" '{print sqrt($2*$2+$3*$3)/(N)}' >> poly_mod.txt #Mod Maldacena loop
+#echo done
+grep "GMES" out.$c-* | awk -v N="$N" '{print ($2*$2+$3*$3)/(N*N)}' >> poly_sq.txt #Poly Square
+
+#echo ==Extracting Internal energy==
+grep "action" ./out.$c-* | awk -v N="$N", -v T="$T" '{print ($7*3.0+2.0*$3+2.0*$5+2.5*$9)*T/(N*N)}' >> energy1.txt #Internal Energy
+#echo done
+
+#echo ==Extracting Internal energy Prime==
+grep "action" ./out.$c-* | awk -v T="$T" '{print ($7*3.0/0.5+2.0*$3+2.0*$5+2.5*$9*1.5)*T*T}' >> energy_prime1.txt #Internal Energy Prime
+#echo done
+
+
+#echo ==Extracting Myers==
+grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($9)*(T/mu)*(1.0/(N*N))}' >> myers1.txt #Myers Term
+#echo done
+
+
+#echo ==Extracting Extent of space==
+grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($3*2.0*9.0+$5*2.0*36.0)*(T/(mu*mu))/(N*N)}' >> extent1.txt #Extent of space
+#echo done
+
+grep "delta" ./out.$c-* | awk '{print $9}' >> action.txt #Action
+grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($3*2.0*9.0)*(T/(mu*mu))/(N*N)}' >> so31.txt #SO3
+grep "action" ./out.$c-* | awk -v T="$T", -v mu="$mu", -v N="$N" '{print ($5*2.0*36.0)*(T/(mu*mu))/(N*N)}' >> so61.txt #SO6
+done
+
+cd ..
+
+cd Results
+
+
+scp ../Out/*.txt ./
+
+awk '{if(NR%2!=0)print}' energy1.txt >> energy.txt
+awk '{if(NR%2!=0)print}' extent1.txt >> extent.txt
+awk '{if(NR%2!=0)print}' myers1.txt >> myers.txt
+awk '{if(NR%2!=0)print}' energy_prime1.txt >> energy_prime.txt
+awk '{if(NR%2!=0)print}' so31.txt >> so3.txt
+awk '{if(NR%2!=0)print}' so61.txt >> so6.txt
+
+echo ==Plotting graphs==
+gnuplot poly.p
+gnuplot poly_mod.p
+gnuplot nstep.p
+gnuplot forces.p
+gnuplot mod_del.p
+gnuplot exp_del.p
+gnuplot del.p
+gnuplot traj.p
+gnuplot energy.p
+gnuplot extent.p
+gnuplot myers.p
+gnuplot action.p
+gnuplot rate.p
+gnuplot so.p
+
+./errors -c1 -s500 energy.txt
+
+avg=`grep "" ./Result.txt | awk -v N="$N" '{print $1*(N*N)}'` 
+
+grep "" ./energy.txt | awk -v avg="$avg", -v N="$N" '{print (($1*(N*N)-avg)*($1*(N*N)-avg))}' >> energy_avg.txt
+
+paste energy_avg.txt energy_prime.txt >> temp.txt
+
+grep "" ./temp.txt | awk '{print $1-$2}' >> spec_heat.txt
+
+rm temp.txt
+
+echo energy >> Result.txt 
+echo action >> Result.txt 
+./errors -c1 -s500 action.txt
+
+echo extent >> Result.txt 
+./errors -c1 -s500 extent.txt
+echo so3 >> Result.txt 
+./errors -c1 -s500 so3.txt
+echo so6 >> Result.txt 
+./errors -c1 -s500 so6.txt
+echo polyakov loop >> Result.txt 
+./errors -c1 -s500 poly_mod.txt
+echo polyakov square avg >> Result.txt 
+./errors -c1 -s500 poly_sq.txt
+echo specific heat without factors >> Result.txt 
+./errors -c1 -s500 spec_heat.txt
+ s_h=`awk 'NR==16{print;}' Result.txt`
+echo specific heat final >> Result.txt 
+echo $s_h | awk -v N="$N", -v T="$T" '{print ($1)*(1.0/T)*(1.0/T)*(1.0/(N*N)),($2)*(1.0/T)*(1.0/T)*(1.0/(N*N))}' >> Result.txt
+echo poly avg square >> Result.txt 
+poly=`awk 'NR==12{print;}' Result.txt`
+echo $poly | awk '{print ($1)*($1),2*($2)*($1)}' >> Result.txt
+
+poly_sq=`awk 'NR==14{print;}' Result.txt`
+echo $poly | awk -v poly_sq="$poly_sq" '{print ($1)*($1),2*($2)*($1),poly_sq}' >> Result_temp.txt
+#echo $poly | awk '{print ($1)*($1),2*($2)*($1)}' >> Result_temp.txt
+
+echo susceptibility >> Result.txt
+grep "" ./Result_temp.txt | awk '{print $3-$1,$2+$4}' >> Result.txt
+
+rm Result_temp.txt
+
+
+echo myers >> Result.txt
+./errors -c1 -s500 myers.txt
+#gnuplot spec_heat.p
+
+energy=`awk 'NR==1{print;}' Result.txt`
+echo $1 $energy >> ../../energy.txt
+action=`awk 'NR==4{print;}' Result.txt`
+echo $1 $action >> ../../action.txt
+extent=`awk 'NR==6{print;}' Result.txt`
+echo $1 $extent >> ../../extent.txt
+so3=`awk 'NR==8{print;}' Result.txt`
+so6=`awk 'NR==10{print;}' Result.txt`
+echo $1 $so3 $so6 >> ../../so.txt
+polyakov=`awk 'NR==12{print;}' Result.txt`
+echo $1 $polyakov >> ../../poly.txt
+spec_heat=`awk 'NR==18{print;}' Result.txt`
+echo $1 $spec_heat >> ../../spec.txt
+suscept=`awk 'NR==22{print;}' Result.txt`
+echo $1 $suscept >> ../../susc.txt
+myers=`awk 'NR==24{print;}' Result.txt`
+echo $1 $myers >> ../../myers.txt
+cd ..
+
+cd Out
+
+rm *.txt
+
+cd ..
+
+
+wait 
+
+echo Done
