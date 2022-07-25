@@ -1,0 +1,142 @@
+#!/bin/bash
+
+# Script used for 2d runs on Param Smriti
+# Original Script used at some other cluster https://github.com/daschaich/susy_scripts/blob/master/runLiv  
+
+if [ $# -lt 6 ]; then
+  echo "Usage: $0 <first> <end> <per_job> nsteps:{<fermion> <gauge>} <time>"
+  exit 1
+fi
+
+# Input parameters
+first=$1
+last=$2
+batch=$3
+fsteps=$4
+gsteps=$5
+time=$6
+
+# Check whether we've correctly set $batch to evenly divide ($last-$first)
+iter=0
+count=$first
+for(( i=$first ; $i<$last ; i+=$batch )); do
+  iter=$[$iter + 1]
+  count=$[$count + $batch]
+done
+echo "Will submit $iter jobs and end up at $count MDTU"
+
+# Adjustable parameters
+nodes=1
+cpus=36
+L=12
+Nt=24
+rt=2.0
+gamma=0.30
+lambda=`echo $rt | awk -v nt="$Nt" '{print($1/nt)*($1/nt)}'`
+bmass=`echo $lambda | awk -v gamma="$gamma" '{print(sqrt($1)*gamma)}'`
+fmass=0.0
+kappa=0.0
+G=0.0
+B=0.0
+Ntraj=10
+traj_length=1
+skip=`echo $Ntraj | awk -v tau="$traj_length" '{print($1*tau)}'`
+
+# Common parameters for all jobs
+tag=rt${rt}_g${gamma} 
+echo "#!/bin/sh" > temp
+echo "#SBATCH  --ntasks=$cpus" >> temp
+echo "#SBATCH --nodes=$nodes" >> temp
+#echo "#SBATCH --ntasks-per-node=36" >> temp
+#echo "#SBATCH --mem=1G" >> temp
+echo "#SBATCH --time=$time" >> temp
+echo "#SBATCH -o job.%j.out" >> temp
+echo "#SBATCH -e job.%j.err" >> temp
+echo "#SBATCH -J sk_$tag" >> temp
+
+dir=/home/navdeepd/susy_bound/Nc12_${L}nt${Nt}/$tag
+bin=/home/navdeepd/susy_bound/susy_hmc-12
+cd $dir
+echo "cd $dir" >> temp
+
+# Check that we're not going to break anything,
+# either through this job or the subsequent jobs it will submit
+lat=$dir/Configs/gauge.$first
+if [ ! -f $lat ]; then
+  echo "ERROR: LATTICE $lat NOT FOUND, SUBMISSION ABORTED"
+  rm -f temp
+  exit 1
+fi
+for(( i=$first ; $i<$last ; i+=$skip )); do
+  next=$[$i + $skip]
+  out=$dir/Out/out.$i-$next
+  lat=$dir/Configs/gauge.$next
+  if [ -f $out ]; then
+    echo "ERROR: OUTPUT FILE $out EXISTS, SUBMISSION ABORTED"
+    rm -f temp
+    exit 1
+  fi
+  if [ -f $lat ]; then
+    echo "ERROR: LATTICE $lat EXISTS, SUBMISSION ABORTED"
+    rm -f temp
+    exit 1
+  fi
+done
+
+# Write this job's evolution tasks to run in a single job
+iter=0
+this_sub=$[$first + $batch]
+for(( i=$first ; $i<$this_sub ; i+=$skip )); do
+  iter=$[$iter + 1]
+  next=$[$i + $skip]
+  out=$dir/Out/out.$i-$next
+  lat=$dir/Configs/gauge
+
+  echo "echo \"Job HMC_${L}nt${Nt}_$tag started \"\`date\`\" jobid \$SLURM_JOBID\" >> $out" >> temp
+  echo "echo \"=== Running MPI application on $cpus cpus ===\" >> $out" >> temp
+  echo "echo \"mpirun -quiet -np $cpus $bin\" >> $out" >> temp
+  echo "mpirun -quiet -np $cpus $bin << EOF >> $out" >> temp
+  echo "prompt 0" >> temp
+  echo "nx $L" >> temp
+  echo "nt $Nt" >> temp
+  echo "PBC -1" >> temp
+  echo "iseed ${last}41$i" >> temp
+
+  echo "Nroot 1" >> temp
+  echo "Norder 16" >> temp
+
+  echo "warms 0" >> temp
+  echo "trajecs $Ntraj" >> temp
+  echo "traj_length $traj_length" >> temp
+  echo "nstep $fsteps" >> temp
+  echo "nstep_gauge $gsteps" >> temp
+  echo "traj_between_meas $Ntraj" >> temp
+
+  echo "lambda $lambda" >> temp
+  echo "kappa_u1 $kappa" >> temp
+  echo "bmass $bmass" >> temp
+  echo "fmass $fmass" >> temp
+  echo "G $G" >> temp
+
+  echo "max_cg_iterations 25000" >> temp
+  echo "error_per_site 1e-4" >> temp
+
+ # echo "fresh" >> temp 
+  echo "reload_serial $lat.$i" >> temp
+  echo "save_serial $lat.$next" >> temp
+  echo "EOF" >> temp
+
+  echo "echo \"=== MPI application finished at \"\`date\`\" ===\" >> $out" >> temp
+  echo "" >> temp
+done
+
+# Submit next job, if applicable
+# Warned above about possibility of ending up between $last and $last+$batch
+if [ $this_sub -lt $last ] ; then
+  echo "echo \"./runParam $this_sub $last $batch $fsteps $gsteps $time\"" >> temp
+  echo "./runParam $this_sub $last $batch $fsteps $gsteps $time" >> temp
+fi
+
+sbatch temp
+rm -f temp
+echo "Requested $time to save $iter configs ($first--$this_sub by $skip)"
