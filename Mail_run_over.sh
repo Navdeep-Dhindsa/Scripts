@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#A script to email only if all runs are over(not listed)
+
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=check_run
@@ -14,7 +16,8 @@
 
 while true; do
   njs=`qstat -u navdeepsingh | grep JOB_NAME | wc -l`
-  #njs=`qstat -u navdeepsingh | grep JOB_NAME | grep -v " R " | wc -l`
+  #njs=`qstat -u navdeepsingh | grep JOB_NAME | grep -v " R " | wc -l` 
+  #comment line 18 and uncomment line 19 if you want mail only after running jobs are over(not listed)
   if [[ $njs ==0 ]] ; then
     break
   else
