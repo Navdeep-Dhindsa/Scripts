@@ -1,3 +1,6 @@
+#The python script can be used to extract group attributes for our 2dQ4 work,
+#hdf5 file can be taken from https://zenodo.org/records/10083865
+
 import h5py
 import os
 from collections import defaultdict
